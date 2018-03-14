@@ -19,8 +19,8 @@
       <button v-else class="button is-success is-medium" @click="parseWords">Parse {{inputWords.length}} Word</button>
     </div>
     <hr />
-    <div class="columns has-text-left">
-      <div class="column is-half">
+    <div class="columns">
+      <div class="column is-half has-text-left">
         <p>
           Two words are considered “friendly” if there exists a one to one mapping of letters between the two.
         </p>
@@ -31,82 +31,121 @@
           This site will take a list of words and output the number of <b>Friendly Words</b> that are found.
         </p>
       </div>
-      <div class="column is-half">
+      <div class="column is-half has-text-centered">
+        <div v-if="parsingWords">
+          <i class="fa-4x fas fa-spinner fa-spin" style="color: #23D161"></i>
+          <h1>
+            Parsing...
+          </h1>
+        </div>
+        <div v-else>
+          <div v-if="successfulParse">
+            <p>
+              Total Words: {{totalWordCount}}
+            </p>
+            <p>
+              Friendly Words: {{friendlyCount}}
+            </p>
+            <p>
+              Unfriendly Words: {{totalWordCount - friendlyCount}}
+            </p>
+          </div>
 
+        </div>
       </div>
     </div>
   </section>
 </template>
 
 <script>
-export default {
-  name: 'FriendlyMain',
-  data() {
-    return {
-      inputWords: [],
-      textAreaWords: '',
-      errors: [],
-      totalWords: 0,
-      friendlyCount: 0,
-    };
-  },
-  methods: {
-    readWords(wordFile) {
-      this.resetErrors();
-      this.textAreaWords = [];
+  import solveFriendlyWords from '../../solver'
 
-      // Verify that a file was uploaded
-      if (!wordFile.length) {
-        return;
-      }
+  export default {
 
-      const file = wordFile[0];
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        // Read all lines from the file and put them in a local variable
-        const lines = e.target.result.split(/\r\n|\n/);
-        this.inputWords = lines;
-        this.textAreaWords = `${this.inputWords.length} word(s) to parse from text file`;
+    name: 'FriendlyMain',
+    data() {
+      return {
+        inputWords: [],
+        textAreaWords: '',
+        errors: [],
+        totalWordCount: 0,
+        friendlyCount: 0,
+        parsingWords: false,
+        successfulParse: false
       };
-      reader.readAsText(file);
     },
-    resetErrors() {
-      this.errors = [];
-    },
-    focusTextArea(e) {
-      this.resetErrors();
-      // Prevent the file browser from opening
-      e.preventDefault();
-      // Focus on the TextArea
-      this.$refs.wordTextArea.focus();
-      // Move the file input field behind the text area while it is focused
-      document.getElementById('fileUpload').style.zIndex = -1;
-    },
-    unfocusTextArea() {
-      // Make sure there is text in the textarea, and that it is not the file upload string
-      if (this.textAreaWords !== '' && !this.textAreaWords.match(/words to parse from.*/)) {
-        // Remove any empty lines, space in between letters and any non-letter characters
-        this.textAreaWords = this.textAreaWords.replace(/(\s*$| *)[^a-zA-Z\s]*/gm, '');
-        this.inputWords = this.textAreaWords.split(/\r\n|\n/);
-      } else if (this.inputWords.length > 0) { // No words to parse in the textarea, check if the text file count should be used
-        this.textAreaWords = `${this.inputWords.length} word(s) to parse from text file`;
-      }
+    methods: {
+      readWords(wordFile) {
+        this.resetErrors();
+        this.textAreaWords = [];
 
-      // Reset the file input field's z position
-      document.getElementById('fileUpload').style.zIndex = 1;
+        // Verify that a file was uploaded
+        if (!wordFile.length) {
+          return;
+        }
+
+        const file = wordFile[0];
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          // Read all lines from the file and put them in a local variable
+          const lines = e.target.result.split(/\r\n|\n/);
+          this.inputWords = lines;
+          this.textAreaWords = this.inputWords.length + ' word(s) to parse from text file';
+        };
+        reader.readAsText(file);
+      },
+      resetErrors() {
+        this.errors = [];
+      },
+      focusTextArea(e) {
+        this.resetErrors();
+        // Prevent the file browser from opening
+        e.preventDefault();
+        // Focus on the TextArea
+        this.$refs.wordTextArea.focus();
+        // Move the file input field behind the text area while it is focused
+        document.getElementById('fileUpload').style.zIndex = -1;
+      },
+      unfocusTextArea() {
+        // Make sure there is text in the textarea, and that it is not the file upload string
+        if (this.textAreaWords !== '' && !this.textAreaWords.match(/word(s) to parse from.*/)) {
+          // Remove any empty lines, space in between letters and any non-letter characters
+          this.textAreaWords = this.textAreaWords.replace(/(\s*$| *)[^a-zA-Z\s]*/gm, '');
+          this.inputWords = this.textAreaWords.split(/\r\n|\n/);
+        } else if (this.inputWords.length > 0) { // No words to parse in the textarea, check if the text file count should be used
+          this.textAreaWords = this.inputWords.length  + ' word(s) to parse from text file';
+        }
+
+        // Reset the file input field's z position
+        document.getElementById('fileUpload').style.zIndex = 1;
+      },
+      sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+      },
+      async parseWords() {
+        this.successfulParse = false
+        // Verify that there are words to parse
+        if (this.inputWords.length === 0) {
+          this.errors.push('No words to parse');
+        } else if (this.inputWords.length === 1) {
+          this.errors.push('There must be at least two words to find friends');
+        } else { // Parse the words for friendly words
+          this.totalWordCount = this.inputWords.length;
+          this.parsingWords = true
+          // Sleep for a bit to let the UI update...
+          await this.sleep(1000);
+          // Call the Friendly Word Solver on the input word list
+          solveFriendlyWords(this.inputWords).then((res) => {
+            this.successfulParse = true;
+            this.friendlyCount = res;
+          }).catch((err) => {
+            this.errors.push(err)
+          })
+          this.parsingWords = false;
+        }
+      },
     },
-    parseWords() {
-      // Verify that there are words to parse
-      if (this.inputWords.length === 0) {
-        this.errors.push('No words to parse');
-      } else if (this.inputWords.length === 1) {
-        this.errors.push('There must be at least two words to find friends');
-      } else { // Parse the words for friendly words
-        this.totalWords = this.inputWords.length;
-      }
-    },
-  },
-};
+  };
 </script>
 
 <!-- Add "scoped" attribute to limit CSS to this component only -->
